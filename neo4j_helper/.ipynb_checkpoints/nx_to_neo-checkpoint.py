@@ -1,3 +1,13 @@
+'''
+nx_to_neo scripts extend the networkx DiGraph class to a derived NeoGraph class with methods for interacting with neo4j.
+
+Interactions with neo4j are currently achieved using sanitized Cypher queries through the neo4j driver.
+
+Possible future update could change interactions to use APOC. 
+
+'''
+
+
 #module specific imports:
 import networkx as nx
 from .nx_ext import draw_labeled_net
@@ -44,8 +54,8 @@ class NeoGraph(nx.DiGraph):
         Ignores identical nodes/edges that are already stored in the DBMS.
         '''
         with self.driver.session() as session:
-            session.execute_write(self.add_new_nodes)
-            session.execute_write(self.add_new_edges)
+            session.write_transaction(self.__add_new_nodes)
+            session.write_transaction(self.__add_new_edges)
             
     def load_from_neo(self):
         '''
@@ -58,10 +68,10 @@ class NeoGraph(nx.DiGraph):
         )
     
         with self.driver.session() as session:
-            session.execute_read(query)
+            session.run(query)
     
-    #---helpers for store_in_neo-----------------------------------------------------
-    def add_new_nodes(self, tx):
+    #---helpers for store_in_neo-----------------------------------------------------   
+    def __add_new_nodes(self, tx):
         '''
         Adds all of the current nodes in the graph to connected DBMS if they do not exist.
         
@@ -89,7 +99,7 @@ class NeoGraph(nx.DiGraph):
             print()
             print(result.single()[0])
                 
-    def add_new_edges(self, tx):
+    def __add_new_edges(self, tx):
         '''
         Adds all of the current edges in the graph to connected DBMS if they do not exist.
         
@@ -122,8 +132,65 @@ class NeoGraph(nx.DiGraph):
             result = tx.run(query)
             print()
             print(result.single()[0])
+            
 #-------end helpers for store_in_neo--------------------------------------
 
+    def create_constraint(label, prop, on = 'node', constraint_type = 'unique'):
+        '''
+        Create a constraint for a particular node label and property. ie. :Person{name} via label = 'Person', prop = 'name'.
+        
+        {on} must be either 'node' or 'relationship'. Changes whether the constraint applies to nodes or relationships.
+        
+        {constraint_type} is currently supported for either 'unique' (uniqueness constraint) or 'exist' (existence constraint).
+        
+        Wrapper for __create_constraint which makes sure inputs are sanitized, and can be used to create Cypher patterns.
+        '''
+        
+        #make sure the passed label and prop are sanitized
+        label, prop = sanitize(label, prop)
+        
+        #change patterns for either node/relationship
+        if on == 'node':
+            pattern = 
+            prop_pattern = 
+         
+        elif on == 'relationship':
+            pattern = 
+            prop_pattern = 
+        else:
+            raise ValueError("Argument {on} must be either 'node' or 'relationship'")
+            
+        #change constraint type
+        if constraint_type == 'unique':
+            session.write_transaction(self.__unique_constraint, label, prop, pattern, prop_pattern)
+        elif constraint_type == 'exist':
+            session.write_transaction(self.__exist_constraint, label, prop, pattern, prop_pattern)
+        else:
+            raise ValueError("Argument {constraint_type} must be either 'unique' or 'exist'")
+            
+            
+            
+        #actually run constraint transaction
+        with self.driver.session() as session:
+                session.write_transaction(self.__create_constraint, label, prop, pattern, prop_pattern)
+            else:
+                raise ValueError("Argument {constraint_type} must be either 'unique' or 'exist'")
+                                        
+            
+    def __create_constraint(tx, pattern, prop_pattern):
+        '''
+        Actually create a constraint for a particular label and property. Wrapped by create_constraint.
+        
+        Takes in a label and property, as well as a pattern and prop_pattern which correspond 
+        to the node/relationship label & property combination.
+        '''            
+        query = (
+                f"CREATE CONSTRAINT {label}_{prop}_unique IF NOT EXISTS\n"
+                f"FOR {pattern}\n"
+                f"REQUIRE 
+            )
+       
+        
 
 #------------non-class helper functions-----------------------------------                
 def sanitize(*strings):
