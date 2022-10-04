@@ -35,7 +35,7 @@ class NeoGraph(nx.DiGraph):
         self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
         
     def __del__(self):
-        close()
+        self.close()
     
     def store_in_neo(self):
         '''
@@ -61,7 +61,16 @@ class NeoGraph(nx.DiGraph):
             session.execute_read(query)
     
     #---helpers for store_in_neo-----------------------------------------------------
-    def add_new_nodes(self):
+    def add_new_nodes(self, tx):
+        '''
+        Adds all of the current nodes in the graph to connected DBMS if they do not exist.
+        
+        Marks creation timestamp if creating a new unmatched node.
+        
+        tx is passed by execute_write
+        
+        Matching based on node name & label
+        '''
         for i in range(len(self.nodes)):
             node_name = list(self.nodes)[i]
             node_label = self.nodes[node_name]['data']['label']
@@ -70,13 +79,26 @@ class NeoGraph(nx.DiGraph):
             node_label, node_name = sanitize(node_label, node_name)
 
             query = (
-                f"MERGE (n:`{node_label}` \{name: `{node_name}` \}\n"
+                f"MERGE (n: {node_label} {{name: \"{node_name}\" }})\n"
                 f"ON CREATE\n"
                 f"    SET n.created = timestamp()\n"
-                "RETURN n, n.created"
+                f"RETURN n, n.created"
             )
+            
+            result = tx.run(query)
+            print()
+            print(result.single()[0])
                 
-    def add_new_edges(self):
+    def add_new_edges(self, tx):
+        '''
+        Adds all of the current edges in the graph to connected DBMS if they do not exist.
+        
+        Markes creation timestamp if creating new edge.
+        
+        tx passed by execute_write
+        
+        Matching based on node1 name & label, relationship, node2 name & label (direction matters). 
+        '''
         for edge in self.edges:
             from_node_name = edge[0]
             from_node_label = self.nodes[from_node_name]['data']['label']
@@ -90,12 +112,16 @@ class NeoGraph(nx.DiGraph):
             #match edge based on from_node--edge_label-->to_node
             #do not allow duplicate edges in parallel of the same type
             query = (
-                f"MERGE (n:{from_node_label} \{name: {from_node_name} \})"
-                f"-[e:{edge_label}]->(n2:{to_node_label} \{name: {to_node_name} \})\n"
+                f"MERGE (n:{from_node_label} {{name: \"{from_node_name}\" }})"
+                f"-[e:{edge_label}]->(n2:{to_node_label} {{ name: \"{to_node_name}\" }})\n"
                 f"ON CREATE\n"
                 f"    SET e.created = timestamp()\n"
                 "RETURN e"
             )
+            
+            result = tx.run(query)
+            print()
+            print(result.single()[0])
 #-------end helpers for store_in_neo--------------------------------------
 
 
@@ -104,15 +130,20 @@ def sanitize(*strings):
     '''
     Removes backticks and semicolons from a string to prevent early termination or exit 
     from a cypher escape block.
+    
+    Then appends backticks on either end to allow for use of spaces and hyphen.
     '''
     sanitized = []
     
     for string in strings:
         #prevent use of any nonchars to prevent cypher injection
-        sanitized.append(string.replace('`', '').replace(';', '') \
-                .replace(' ','').replace('/','').replace ('(','') \
+        string = string.replace('`', '').replace(';', '') \
+                .replace('/','').replace ('(','') \
                 .replace(')','').replace('{','') \
-                .replace('}',''))
+                .replace('}','')
+        
+        sanitized.append(string)
+        
     return tuple(sanitized)
                          
                         
