@@ -36,7 +36,8 @@ def get_edge_labels(G: nx.DiGraph):
         except KeyError as e:
             edge_labels[edge] = 'None'
     return edge_labels
-            
+    
+#TODO: edit this function to automatically come up with colors for different label, get rid of color requirement for NeoGraphs
 def get_node_colors(G: nx.DiGraph):
     colors = []
     for i in range(len(G.nodes)):

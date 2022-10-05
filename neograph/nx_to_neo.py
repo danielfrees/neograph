@@ -3,7 +3,15 @@ nx_to_neo scripts extend the networkx DiGraph class to a derived NeoGraph class 
 
 Interactions with neo4j are currently achieved using sanitized Cypher queries through the neo4j driver.
 
-Possible future update could change interactions to use APOC. 
+TODO:
+    -Fix driver close functionality
+    -Change network plot to use pyvis, networkx does not work well for larger plots
+    -Batch add node and edge queries for better performance.
+    -Add drop constraint functionality
+    -Add graph deletion functionality (requiring confirmation)
+
+POSSIBLE TODO:
+    -Use apoc to make queries better.
 
 '''
 
@@ -59,16 +67,65 @@ class NeoGraph(nx.DiGraph):
             
     def load_from_neo(self):
         '''
-        Loads all nodes/edges from a connected neo4j DBMS into a networkx graph.
-        '''
+        UNFINISHED, currently just reads neo data.
         
+        Loads all nodes/edges from a connected neo4j DBMS into a networkx graph.
+        Will not load duplicate nodes or edges. 
+        
+        Wrapper for work function __load_from_neo.
+        
+        Returns None if nothing in DBMS instance.
+        '''
+        record = None
+        
+        with self.driver.session() as session:
+            record = session.read_transaction(self.__load_from_neo)
+            
+        if record:
+            print(record)
+        else:
+            print('Nothing found in this DBMS instance.')
+        return record
+    
+    def __load_from_neo(self, tx):
         query = (
-            f"MATCH (n)]n"
+            f"MATCH (n)\n"
             f"RETURN n"
         )
     
+        result = tx.run(query)
+        record = result.data()
+        return record
+    
+    def read_from_neo(self):
+        '''
+        Prints and returns the current data stored in the connected neo4j DBMS.
+        
+        Wrapper for work function __read_from_neo.
+        
+        Returns None if nothing in DBMS instance.
+        '''
+        record = None
+        
         with self.driver.session() as session:
-            session.run(query)
+            record = session.read_transaction(self.__read_from_neo)
+            
+        if record:
+            print(record)
+        else:
+            print('Nothing found in this DBMS instance.')
+        return record
+    
+    def __read_from_neo(self, tx):
+        query = (
+            f"MATCH (n)\n"
+            f"RETURN n"
+        )
+    
+        result = tx.run(query)
+        record = result.data()
+        return record
+        
     
     #---helpers for store_in_neo-----------------------------------------------------   
     def __add_new_nodes(self, tx):
@@ -84,20 +141,27 @@ class NeoGraph(nx.DiGraph):
         for i in range(len(self.nodes)):
             node_name = list(self.nodes)[i]
             node_label = self.nodes[node_name]['data']['label']
+            other_props = self.nodes[node_name]['data'].copy()
+            other_props.pop('label') #label is reserved for neo4j label usage, not considered a supplement attribute
+            other_props = self.__unpack_props(other_props)
             
             #prevent cypher injection
             node_label, node_name = sanitize(node_label, node_name)
 
             query = (
-                f"MERGE (n: {node_label} {{name: \"{node_name}\" }})\n"
+                f"MERGE (n: {node_label} {{name: \"{node_name}\" {other_props}}})\n"
                 f"ON CREATE\n"
                 f"    SET n.created = timestamp()\n"
                 f"RETURN n, n.created"
             )
             
             result = tx.run(query)
-            print()
-            print(result.single()[0])
+            record = result.data()
+            if record:
+                print("\nAdd node query result:")
+                print(record)
+            else:
+                print("No node added, nor does it exist. Check query syntax or raise github issue.")
                 
     def __add_new_edges(self, tx):
         '''
@@ -124,20 +188,40 @@ class NeoGraph(nx.DiGraph):
             #match edge based on from_node--edge_label-->to_node
             #do not allow duplicate edges in parallel of the same type
             query = (
-                f"MERGE (n:{from_node_label} {{name: \"{from_node_name}\" }})"
-                f"-[e:{edge_label}]->(n2:{to_node_label} {{ name: \"{to_node_name}\" }})\n"
+                f"MERGE (n:{from_node_label} {{name: \"{from_node_name}\" }})\n"
+                f"MERGE (n2:{to_node_label} {{name: \"{to_node_name}\" }})\n"
+                f"MERGE (n)-[e:{edge_label}]->(n2)\n"
                 f"ON CREATE\n"
                 f"    SET e.created = timestamp()\n"
                 "RETURN e"
             )
             
             result = tx.run(query)
-            print()
-            print(result.single()[0])
+            record = result.data()
+            if record:
+                print("\nAdd relationship query result:")
+                print(record)
+            else:
+                print("No relationship added, nor does it exist. Check query syntax or raise github issue.")
+            
+    def __unpack_props(self, props):
+        '''
+        Takes in a dict of added properties to be unpacked into Cypher syntax and placed within curly bracks. 
+        Begins with , because name must already exist in properties and therefore any additional properties must be preceded by a comma
+        
+        ie: props = {'color':'red', 'favorite_food':'pizza'} -> ",'color':'red', 'favorite_food':'pizza"
+        
+        If props dict is empty, returns empty string.
+        '''
+        
+        unpacked_props = ""
+        for key, value in props.items():
+            unpacked_props += f",{key}:\"{value}\""
+        return unpacked_props
             
 #-------end helpers for store_in_neo--------------------------------------
 
-    def create_constraint(label, prop, on = 'node', constraint_type = 'unique'):
+    def create_constraint(self, label, prop, on = 'node', constraint_type = 'unique'):
         '''
         Create a constraint for a particular node label and property. ie. :Person{name} via label = 'Person', prop = 'name'.
         
@@ -175,7 +259,7 @@ class NeoGraph(nx.DiGraph):
                 session.write_transaction(self.__create_constraint, label, prop, on, pattern, requirement)
                                         
             
-    def __create_constraint(tx, label, prop, on, pattern, requirement):
+    def __create_constraint(self, tx, label, prop, on, pattern, requirement):
         '''
         Actually create a constraint for a particular label and property. Wrapped by create_constraint.
         
@@ -185,22 +269,43 @@ class NeoGraph(nx.DiGraph):
         on- 'node' or 'edge', whichever the constraint applies to
         pattern- the match pattern produced by wrapper function create_constraint
         requirement- syntax for the constraint type
-        '''            
+        ''' 
         query = (
-                f"CREATE CONSTRAINT {label}({on})_{prop}_unique IF NOT EXISTS\n"
+                f"CREATE CONSTRAINT {label}_{on}_{prop}_unique IF NOT EXISTS\n"
                 f"FOR {pattern}\n"
                 f"REQUIRE x.{prop} {requirement}"    #note that the pattern will always be aliased as x, regardless of node vs. relationship
             )
-     
-    def get_constraints(tx):
-    '''
-    Return & print all current constraints in the DBMS linked to self.driver.
-    '''
+        result = tx.run(query)
+        record = result.data()
+        if record:
+            print("\nAdd constraint query result:")
+            print(record)
+        else: 
+            print(f'Desired constraint on {on}s for {label}{{{prop}}} already exists.')
+        
+    def get_constraints(self):
+        '''
+        Return & print all current constraints in the DBMS linked to self.driver.
+        
+        Wrapper for work function __get_constraints.
+        '''
+        with self.driver.session() as session:
+            session.read_transaction(self.__get_constraints)
+         
+    def __get_constraints(self, tx):
+        '''
+        Worker function to enact transaction for get_constraints.
+        '''
         query = (
             "SHOW CONSTRAINTS"
             )
         result = tx.run(query)
-        print(result.single()[0])
+        record = result.data()
+        if record:
+            print("\nGet constraint query result:")
+            print(record)
+        else:
+            print('No constraints found. Use create_constraint to set constraints from a NeoGraph.')
         return result
 
 #------------non-class helper functions-----------------------------------                
