@@ -11,7 +11,7 @@ setup(name='NeoGraph',
     author_email='danielfrees247@gmail.com',
     maintainer = "Daniel Frees",
     url='https://github.com/danielfrees/neograph',
-    packages=['neograph', 'neograph.nx_ext'],
+    packages=['neograph'],
     python_requires='>=3.8',
     install_requires=[
         'networkx',
