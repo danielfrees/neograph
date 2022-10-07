@@ -228,11 +228,13 @@ class NeoGraph(nx.DiGraph):
         ie: props = {'color':'red', 'favorite_food':'pizza'} -> ",'color':'red', 'favorite_food':'pizza"
         
         If props dict is empty, returns empty string.
+        
+        Sanitizes properties as well.
         '''
         
         unpacked_props = ""
         for key, value in props.items():
-            unpacked_props += f", {key}:\"{value}\""
+            unpacked_props += f", {sanitize(key)}:\"{sanitize(value)}\""
         return unpacked_props[1:] #remove first comma
             
 #-------end helpers for store_in_neo--------------------------------------
