@@ -337,7 +337,7 @@ class NeoGraph(nx.DiGraph):
         return result
 
 #------------non-class helper functions-----------------------------------                
-def sanitize(*strings):
+def sanitize(*strings : str):
     '''
     Removes backticks and semicolons from a string to prevent early termination or exit 
     from a cypher escape block.
