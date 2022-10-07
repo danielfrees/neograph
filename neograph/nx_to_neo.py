@@ -55,15 +55,17 @@ class NeoGraph(nx.DiGraph):
     def __del__(self):
         self.close()
     
-    def store_in_neo(self):
+    def store_in_neo(self, verbose = False):
         '''
         Add all nodes/edges in the current DiGraph to the neo4j connected DBMS.
 
         Ignores identical nodes/edges that are already stored in the DBMS.
+        
+        Use [verbose] if you want feedback on transaction responses.
         '''
         with self.driver.session() as session:
-            session.write_transaction(self.__add_new_nodes)
-            session.write_transaction(self.__add_new_edges)
+            session.write_transaction(self.__add_new_nodes, verbose)
+            session.write_transaction(self.__add_new_edges, verbose)
             
     def load_from_neo(self):
         '''
@@ -128,20 +130,20 @@ class NeoGraph(nx.DiGraph):
         
     
     #---helpers for store_in_neo-----------------------------------------------------   
-    def __add_new_nodes(self, tx):
+    def __add_new_nodes(self, tx, verbose = False):
         '''
         Adds all of the current nodes in the graph to connected DBMS if they do not exist.
+        Nodes are matched based on label, name.
+        If a node is matched but the NeoGraph has new properties, these will be added to the matched node. 
         
         Marks creation timestamp if creating a new unmatched node.
-        
-        tx is passed by execute_write
-        
-        Matching based on node name & label
         '''
         for i in range(len(self.nodes)):
             node_name = list(self.nodes)[i]
             node_label = self.nodes[node_name]['data']['label']
-            other_props = self.nodes[node_name]['data'].copy()
+            
+            #get extra attrs
+            other_props = self.nodes[node_name]['data'].copy()   #extra attributes on nodes are kept under 'data' in nx
             other_props.pop('label') #label is reserved for neo4j label usage, not considered a supplement attribute
             other_props = self.__unpack_props(other_props)
             
@@ -149,23 +151,29 @@ class NeoGraph(nx.DiGraph):
             node_label, node_name = sanitize(node_label, node_name)
 
             query = (
-                f"MERGE (n: {node_label} {{name: \"{node_name}\" {other_props}}})\n"
+                f"MERGE (n: {node_label} {{name: \"{node_name}\"}})\n"
                 f"ON CREATE\n"
                 f"    SET n.created = timestamp()\n"
+                f"SET n += {{{other_props}}}\n"
                 f"RETURN n, n.created"
             )
             
             result = tx.run(query)
             record = result.data()
-            if record:
-                print("\nAdd node query result:")
-                print(record)
-            else:
-                print("No node added, nor does it exist. Check query syntax or raise github issue.")
+            
+            if verbose:
+                if record:
+                    print("\nAdd node query result:")
+                    print(record)
+                else:
+                    print("No node added, nor does it exist. Check query syntax or raise github issue.")
                 
-    def __add_new_edges(self, tx):
+    def __add_new_edges(self, tx, verbose = False):
         '''
         Adds all of the current edges in the graph to connected DBMS if they do not exist.
+        
+        If an edge already exists with the same label (but different properties), the new properties 
+        will be added to the pre-existing edge.
         
         Marks creation timestamp if creating new edge.
         
@@ -182,6 +190,11 @@ class NeoGraph(nx.DiGraph):
             to_node_label = self.nodes[to_node_name]['data']['label']
             edge_label = self.edges[edge]['label']
             
+            #get extra attrs
+            props = self.edges[edge].copy()  #extra attrs are maintained at highest level for edges in nx (no 'data' subcat)
+            props.pop('label')  #label is required under neo4j standards, not an extra
+            props = self.__unpack_props(props)
+            
             from_node_name, from_node_label, to_node_name, to_node_label, edge_label \
                 = sanitize(from_node_name, from_node_label, to_node_name, to_node_label, edge_label)
             
@@ -192,17 +205,20 @@ class NeoGraph(nx.DiGraph):
                 f"MERGE (n2:{to_node_label} {{name: \"{to_node_name}\" }})\n"
                 f"MERGE (n)-[e:{edge_label}]->(n2)\n"
                 f"ON CREATE\n"
-                f"    SET e.created = timestamp()\n"
+                f"    SET e.created = timestamp()\n" 
+                f"SET e += {{{props}}}\n"                       #add additional properties to a prior edge if it already exists
                 "RETURN e"
             )
             
             result = tx.run(query)
             record = result.data()
-            if record:
-                print("\nAdd relationship query result:")
-                print(record)
-            else:
-                print("No relationship added, nor does it exist. Check query syntax or raise github issue.")
+            
+            if verbose:
+                if record:
+                    print("\nAdd relationship query result:")
+                    print(record)
+                else:
+                    print("No relationship added, nor does it exist. Check query syntax or raise github issue.")
             
     def __unpack_props(self, props):
         '''
@@ -216,8 +232,8 @@ class NeoGraph(nx.DiGraph):
         
         unpacked_props = ""
         for key, value in props.items():
-            unpacked_props += f",{key}:\"{value}\""
-        return unpacked_props
+            unpacked_props += f", {key}:\"{value}\""
+        return unpacked_props[1:] #remove first comma
             
 #-------end helpers for store_in_neo--------------------------------------
 
