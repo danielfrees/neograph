@@ -144,13 +144,24 @@ class NeoGraph(nx.DiGraph):
             
             #get extra attrs
             other_props = self.nodes[node_name]['data'].copy()   #extra attributes on nodes are kept under 'data' in nx
+            
+            if verbose:
+                print('name, label, other props:')
+                print(node_name)
+                print(node_label)
+                print(other_props)
+                print()
+                
             other_props.pop('label') #label is reserved for neo4j label usage, not considered a supplement attribute
             other_props = self.__unpack_props(other_props)
             
             #prevent cypher injection
             node_label, node_name = sanitize(node_label, node_name)
 
-            print(other_props)
+            if verbose:
+                print('Other props before query:')
+                print(other_props)
+                print()
             
             query = (
                 f"MERGE (n: {node_label} {{name: \"{node_name}\"}})\n"
