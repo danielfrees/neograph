@@ -150,6 +150,8 @@ class NeoGraph(nx.DiGraph):
             #prevent cypher injection
             node_label, node_name = sanitize(node_label, node_name)
 
+            print(other_props)
+            
             query = (
                 f"MERGE (n: {node_label} {{name: \"{node_name}\"}})\n"
                 f"ON CREATE\n"
