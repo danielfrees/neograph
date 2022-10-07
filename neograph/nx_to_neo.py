@@ -139,28 +139,22 @@ class NeoGraph(nx.DiGraph):
         Marks creation timestamp if creating a new unmatched node.
         '''
         for i in range(len(self.nodes)):
-            node_name = list(self.nodes)[i]
-            node_label = self.nodes[node_name]['data']['label']
+            node_name = str(list(self.nodes)[i])
+            node_label = str(self.nodes[node_name]['data']['label'])
             
             #get extra attrs
             other_props = self.nodes[node_name]['data'].copy()   #extra attributes on nodes are kept under 'data' in nx
-            
-            if verbose:
-                print('name, label, other props:')
-                print(node_name)
-                print(node_label)
-                print(other_props)
-                print()
-                
             other_props.pop('label') #label is reserved for neo4j label usage, not considered a supplement attribute
-            other_props = self.__unpack_props(other_props)
+            other_props = self.__unpack_props(other_props) #handles injection protection within __unpack_props
             
-            #prevent cypher injection
+            #prevent cypher injection on name/label
             node_label, node_name = sanitize(node_label, node_name)
 
             if verbose:
-                print('Other props before query:')
-                print(other_props)
+                print('Storing the following node...')
+                print(f"name: {node_name}")
+                print(f"label: {node_label}")
+                print(f"other props: {other_props}")
                 print()
             
             query = (
@@ -247,7 +241,10 @@ class NeoGraph(nx.DiGraph):
         
         unpacked_props = ""
         for key, value in props.items():
-            unpacked_props += f", {sanitize(key)}:\"{sanitize(value)}\""
+            if isinstance(value, str):
+                unpacked_props += f", {sanitize(str(key))}:\"{sanitize(value)}\""
+            else:
+                unpacked_props += f", {sanitize(str(key))}:\"{value}\""
         return unpacked_props[1:] #remove first comma
             
 #-------end helpers for store_in_neo--------------------------------------
@@ -346,6 +343,8 @@ def sanitize(*strings):
     from a cypher escape block.
     
     Then appends backticks on either end to allow for use of spaces and hyphen.
+    
+    Note: input MUST be strings
     '''
     sanitized = []
     
@@ -357,8 +356,14 @@ def sanitize(*strings):
                 .replace('}','')
         
         sanitized.append(string)
-        
-    return tuple(sanitized)
+    
+    if len(sanitized) == 1:
+        return sanitized[0]
+    else:
+        return tuple(sanitized)
+    
+    
+    
                          
                         
                          
