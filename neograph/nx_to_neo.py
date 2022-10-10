@@ -56,6 +56,7 @@ class NeoGraph(nx.DiGraph):
     def __del__(self):
         if self.driver:
             self.close()
+        super().__del__()
     
     def store_in_neo(self, verbose = False):
         '''
