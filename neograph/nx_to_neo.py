@@ -44,7 +44,8 @@ class NeoGraph(nx.DiGraph):
         '''
         Close out the DBMS connection.
         '''
-        self.driver.close()
+        if self.driver:
+            self.driver.close()
         
     def reopen(self):
         '''
@@ -53,7 +54,8 @@ class NeoGraph(nx.DiGraph):
         self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
         
     def __del__(self):
-        self.close()
+        if self.driver:
+            self.close()
     
     def store_in_neo(self, verbose = False):
         '''
