@@ -20,6 +20,11 @@ POSSIBLE TODO:
 import networkx as nx
 from .nx_ext import draw_labeled_net
 import neo4j
+import logging
+from logging import getLogger
+
+# Set up logger
+log = getLogger("neo4j")
 
 #------------end imports---------------------------------------------
 
@@ -38,6 +43,7 @@ class NeoGraph(nx.DiGraph):
         Therefore, init requires 3 additional positional args: uri, user, password
         '''
         self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
+        self.driver.verify_connectivity()   #immediately make sure connection worked
         nx.DiGraph.__init__(self, incoming_graph_data, **attr) #pass the rest to DiGraph's init
         
     def close(self):
@@ -45,6 +51,7 @@ class NeoGraph(nx.DiGraph):
         Close out the DBMS connection.
         '''
         if self.driver:
+            log.debug(f'Closing neo4j cxn.')
             self.driver.close()
         
     def reopen(self):
