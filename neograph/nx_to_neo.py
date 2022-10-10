@@ -53,6 +53,7 @@ class NeoGraph(nx.DiGraph):
         if self.driver:
             log.debug(f'Closing neo4j cxn.')
             self.driver.close()
+            self.driver.__del__()
         
     def reopen(self):
         '''
