@@ -46,7 +46,7 @@ class NeoGraph(nx.DiGraph):
 
         nx.DiGraph.__init__(self, incoming_graph_data, **attr) #pass the rest to DiGraph's init
         
-    def _set_driver(uri, user, password):
+    def _set_driver(self, uri, user, password):
         '''
         Sets up a neo4j driver for this NeoGraph instance. 
         
