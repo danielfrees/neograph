@@ -311,10 +311,10 @@ class NeoGraph(nx.DiGraph):
             
         #actually run constraint transaction
         with self.driver.session() as session:
-                session.write_transaction(self.__create_constraint, label, prop, on, pattern, requirement)
+                session.write_transaction(self.__create_constraint, label, prop, on, constraint_type, pattern, requirement)
                                         
             
-    def __create_constraint(self, tx, label, prop, on, pattern, requirement):
+    def __create_constraint(self, tx, label, prop, on, constraint_type, pattern, requirement):
         '''
         Actually create a constraint for a particular label and property. Wrapped by create_constraint.
         
@@ -336,7 +336,7 @@ class NeoGraph(nx.DiGraph):
             print("\nAdd constraint query result:")
             print(record)
         else: 
-            print(f'Desired constraint on {on}s for {label}{{{prop}}} already exists.')
+            print(f'Desired {constraint_type} constraint on {on}s for {label}{{{prop}}} already exists.')
         
     def get_constraints(self):
         '''

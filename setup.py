@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(name='NeoGraph',
-    version='0.1',
+    version='0.2',
     description='NetworkX Graph Syncing with neo4j: NeoGraphs',
     long_description=("NeoGraph class extends NetworkX DiGraphs by enabling"
     "syncing with a neo4j DBMS. For detailed usage instructions visit"
