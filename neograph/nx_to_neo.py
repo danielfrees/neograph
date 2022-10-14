@@ -42,29 +42,45 @@ class NeoGraph(nx.DiGraph):
             
         Therefore, init requires 3 additional positional args: uri, user, password
         '''
-        self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
-        self.driver.verify_connectivity()   #immediately make sure connection worked
+        self._set_driver(uri, user, password)
+
         nx.DiGraph.__init__(self, incoming_graph_data, **attr) #pass the rest to DiGraph's init
         
-    def close(self):
+    def _set_driver(uri, user, password):
         '''
-        Close out the DBMS connection.
+        Sets up a neo4j driver for this NeoGraph instance. 
+        
+        Not meant to be used directly, does not check for existing driver.
+        '''
+        self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
+        self.driver.verify_connectivity()   #immediately make sure connection worked
+        
+        #keep track of uri and user, not password
+        self.uri = uri
+        self.user = user
+        
+    def close_driver(self):
+        '''
+        Close out the DBMS connection, if one exists. 
         '''
         if self.driver:
-            log.debug(f'Closing neo4j cxn.')
+            log.debug(f'Closing neo4j cxn from NeoGraph.')
             self.driver.close()
-            self.driver.__del__()
-        
-    def reopen(self):
+            self.driver = None
+            self.uri = None
+            self.user = None
+            
+    def reopen(self, uri, user, password):
         '''
         Reopen the DBMS connection if it is closed.
         '''
-        self.driver = neo4j.GraphDatabase.driver(uri=uri, auth = (user, password))
-        
-    def __del__(self):
-        if self.driver:
-            self.close()
-        super().__del__()
+        if not self.driver:
+            self._set_driver(uri, user, password)
+        else:
+            print(f"You already have a neo4j driver running:\n"
+                  f"URI: {self.uri}\n"
+                  f"User: {self.user}\n"
+                  f"If you would like to start a new connection, first use G.close()")
     
     def store_in_neo(self, verbose = False):
         '''
